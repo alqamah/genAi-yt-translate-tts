@@ -3,9 +3,9 @@ const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
 const { getSubtitles } = require('./subtitles');
-const { translateText } = require('./translate');
-const { generateSpeech } = require('./tts');
-const { processVideo } = require('./videoProcessor');
+// const { translateText } = require('./translate');
+// const { generateSpeech } = require('./tts');
+// const { processVideo } = require('./videoProcessor');
 const fs = require('fs').promises;
 
 const app = express();
@@ -39,19 +39,42 @@ app.post('/process-video', async (req, res) => {
     });
   }
   
-  if (!targetLanguage) {
-    return res.status(400).json({ 
-      error: 'Missing targetLanguage parameter',
-      status: 'error'
-    });
-  }
+  // if (!targetLanguage) {
+  //   return res.status(400).json({ 
+  //     error: 'Missing targetLanguage parameter',
+  //     status: 'error'
+  //   });
+  // }
   
   // Process the video in steps
   try {
     // Step 1: Extract subtitles
     console.log(`Step 1: Extracting subtitles from ${videoUrl}`);
     const subtitles = await getSubtitles(videoUrl);
-    console.log(`Extracted ${subtitles.length} subtitles`);
+    console.log(`Extracted subtitles array length: ${subtitles.length}`);
+    console.log('First few subtitles:', subtitles.slice(0, 3));
+    
+    // Find the most recent subtitle file
+    const subtitlesDir = path.join('temp', 'subtitles');
+    const files = await fs.readdir(subtitlesDir);
+    const subtitleFiles = files.filter(file => file.startsWith('subs_') && file.endsWith('.srt'));
+    const latestSubtitleFile = subtitleFiles.sort().pop();
+    
+    if (!latestSubtitleFile) {
+      throw new Error('No subtitle file found');
+    }
+    
+    const subtitlesPath = path.join(subtitlesDir, latestSubtitleFile);
+    console.log(`Using subtitle file: ${subtitlesPath}`);
+    
+    // Verify file was created and read its contents
+    try {
+      const fileContent = await fs.readFile(subtitlesPath, 'utf8');
+      console.log('File size:', fileContent.length, 'bytes');
+      console.log('First 500 characters of subtitle file:', fileContent.substring(0, 500));
+    } catch (readError) {
+      console.error('Error reading subtitle file:', readError);
+    }
     
     if (!subtitles || subtitles.length === 0) {
       return res.status(500).json({ 
@@ -61,27 +84,27 @@ app.post('/process-video', async (req, res) => {
     }
     
     // Step 2: Translate subtitles
-    console.log(`Step 2: Translating subtitles to ${targetLanguage}`);
-    const translatedSubtitles = await translateText(subtitles, targetLanguage);
-    console.log(`Translated ${translatedSubtitles.length} subtitles`);
+    // console.log(`Step 2: Translating subtitles to ${targetLanguage}`);
+    // const translatedSubtitles = await translateText(subtitles, targetLanguage);
+    // console.log(`Translated ${translatedSubtitles.length} subtitles`);
     
     // Step 3: Generate speech from translated text
-    console.log(`Step 3: Generating speech in ${targetLanguage}`);
-    const audioPath = await generateSpeech(translatedSubtitles, targetLanguage);
-    console.log(`Generated audio at ${audioPath}`);
+    // console.log(`Step 3: Generating speech in ${targetLanguage}`);
+    // const audioPath = await generateSpeech(translatedSubtitles, targetLanguage);
+    // console.log(`Generated audio at ${audioPath}`);
     
     // Step 4: Process video with new audio
-    console.log(`Step 4: Processing video with new audio`);
-    const outputPath = await processVideo(videoUrl, audioPath);
-    console.log(`Processed video saved to ${outputPath}`);
+    // console.log(`Step 4: Processing video with new audio`);
+    // const outputPath = await processVideo(videoUrl, audioPath);
+    // console.log(`Processed video saved to ${outputPath}`);
     
     // Return the processed video URL
-    const videoUrl = path.basename(outputPath);
-    console.log(`Returning video URL: ${videoUrl}`);
+    // const outputVideoUrl = path.basename(outputPath);
+    // console.log(`Returning video URL: ${videoUrl}`);
     
     res.json({ 
       success: true, 
-      videoUrl: `/output/${videoUrl}`,
+      subtitlesPath: subtitlesPath,
       status: 'success'
     });
   } catch (error) {

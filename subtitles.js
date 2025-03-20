@@ -17,7 +17,7 @@ async function getSubtitles(videoUrl) {
     const options = {
       writeSub: true,
       writeAutoSub: true,
-      subFormat: 'vtt',
+      subFormat: 'srt',
       output: outputPath,
       skipDownload: true,
       verbose: true
@@ -26,10 +26,9 @@ async function getSubtitles(videoUrl) {
     const result = await youtubeDl(videoUrl, options);
     console.log("youtube-dl result:", result);
     
-    // youtube-dl automatically adds extensions to the output file
-    // Look for any files that match our output name pattern
+    // Look for the subtitle file
     const files = await fs.readdir(outputDir);
-    const subtitleFile = files.find(file => file.startsWith(path.basename(outputName)) && file.endsWith('.vtt'));
+    const subtitleFile = files.find(file => file.startsWith(outputName) && file.endsWith('.srt'));
     
     if (!subtitleFile) {
       throw new Error('No subtitle file was generated');
@@ -40,12 +39,10 @@ async function getSubtitles(videoUrl) {
     
     // Read the subtitle file
     const subtitleContent = await fs.readFile(fullSubtitlePath, 'utf-8');
+    console.log('Subtitle content preview:', subtitleContent.substring(0, 200));
     
-    // Parse VTT content into structured format
-    const subtitles = parseVTT(subtitleContent);
-    
-    // Clean up temporary file
-    await fs.unlink(fullSubtitlePath);
+    // Parse SRT content into structured format
+    const subtitles = parseSRT(subtitleContent);
     
     if (subtitles.length === 0) {
       // If no subtitles were parsed, create a placeholder
@@ -69,35 +66,46 @@ async function getSubtitles(videoUrl) {
   }
 }
 
-function parseVTT(vttContent) {
-  console.log("Parsing VTT content:", vttContent.substring(0, 200) + "...");
+function parseSRT(srtContent) {
+  console.log("Parsing SRT content...");
   
-  const lines = vttContent.split('\n');
+  const lines = srtContent.split('\n');
   const subtitles = [];
   let currentSubtitle = {};
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     
+    // Skip empty lines
+    if (!line) continue;
+    
+    // If line is a number, it's the start of a new subtitle
+    if (/^\d+$/.test(line)) {
+      if (currentSubtitle.text) {
+        subtitles.push(currentSubtitle);
+      }
+      currentSubtitle = {};
+      continue;
+    }
+    
+    // If line contains '-->', it's the timestamp
     if (line.includes('-->')) {
-      // Time stamps line
       const [start, end] = line.split('-->').map(time => time.trim());
       currentSubtitle = {
         start: parseTimeStamp(start),
         end: parseTimeStamp(end),
         text: ''
       };
-    } else if (line && !line.includes('WEBVTT') && currentSubtitle.start) {
-      // Subtitle text
+    } else if (currentSubtitle.start) {
+      // This is subtitle text
       currentSubtitle.text += line + ' ';
-      
-      // If next line is empty or we're at the end, save this subtitle
-      if (!lines[i + 1]?.trim() || i === lines.length - 1) {
-        currentSubtitle.text = currentSubtitle.text.trim();
-        subtitles.push(currentSubtitle);
-        currentSubtitle = {};
-      }
     }
+  }
+  
+  // Add the last subtitle if it exists
+  if (currentSubtitle.text) {
+    currentSubtitle.text = currentSubtitle.text.trim();
+    subtitles.push(currentSubtitle);
   }
   
   console.log(`Parsed ${subtitles.length} subtitles`);
@@ -106,7 +114,7 @@ function parseVTT(vttContent) {
 
 function parseTimeStamp(timeStamp) {
   try {
-    const [time, milliseconds] = timeStamp.split('.');
+    const [time, milliseconds] = timeStamp.split(',');
     const [hours, minutes, seconds] = time.split(':').map(Number);
     return (hours * 3600 + minutes * 60 + seconds) * 1000 + Number(milliseconds || 0);
   } catch (error) {
