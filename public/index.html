@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Translation App</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+        }
+        input[type="text"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .progress {
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 5px;
+            color: #666;
+        }
+        #result {
+            margin-top: 20px;
+            display: none;
+        }
+        .step {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+        .step.active {
+            background-color: #e1f5fe;
+        }
+        .step.completed {
+            background-color: #e8f5e9;
+        }
+        .step.error {
+            background-color: #ffebee;
+        }
+        video {
+            width: 100%;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .error-message {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: none;
+        }
+        .sample-url {
+            color: #1976d2;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: 5px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Video Translation App</h1>
+        <div class="form-group">
+            <label for="videoUrl">YouTube Video URL:</label>
+            <input type="text" id="videoUrl" placeholder="Enter YouTube video URL">
+            <div class="sample-url" onclick="useSampleUrl()">Use a sample URL</div>
+        </div>
+        <div class="form-group">
+            <label for="targetLanguage">Target Language:</label>
+            <select id="targetLanguage">
+                <option value="hi">Hindi</option>
+                <option value="ur">Urdu</option>
+                <option value="ar">Arabic</option>
+                <option value="bn">Bengali</option>
+                <option value="id">Indonesian</option>
+            </select>
+        </div>
+        <button id="processBtn" onclick="processVideo()">Translate Video</button>
+        
+        <div id="status"></div>
+        <div class="error-message" id="errorMessage"></div>
+        
+        <div class="progress-container" id="progressContainer">
+            <div class="step" id="step1">Step 1: Extracting subtitles...</div>
+            <div class="step" id="step2">Step 2: Translating subtitles...</div>
+            <div class="step" id="step3">Step 3: Generating speech...</div>
+            <div class="step" id="step4">Step 4: Processing video...</div>
+            <div class="progress">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="progress-text" id="progressText">Processing: 0%</div>
+        </div>
+        
+        <div id="result">
+            <h3>Processed Video:</h3>
+            <video id="processedVideo" controls></video>
+        </div>
+    </div>
+
+    <script>
+        // UI elements
+        const videoUrlInput = document.getElementById('videoUrl');
+        const targetLanguageSelect = document.getElementById('targetLanguage');
+        const processBtn = document.getElementById('processBtn');
+        const status = document.getElementById('status');
+        const errorMessage = document.getElementById('errorMessage');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const result = document.getElementById('result');
+        const processedVideo = document.getElementById('processedVideo');
+        
+        // Step elements
+        const step1 = document.getElementById('step1');
+        const step2 = document.getElementById('step2');
+        const step3 = document.getElementById('step3');
+        const step4 = document.getElementById('step4');
+        
+        // Use a sample URL for testing
+        function useSampleUrl() {
+            videoUrlInput.value = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+        }
+        
+        // Update progress
+        function updateProgress(percentage) {
+            progressBar.style.width = `${percentage}%`;
+            progressText.textContent = `Processing: ${percentage}%`;
+        }
+        
+        // Set step status
+        function setStepStatus(step, status) {
+            // Reset all classes
+            step.classList.remove('active', 'completed', 'error');
+            
+            // Set appropriate class
+            if (status === 'active') {
+                step.classList.add('active');
+            } else if (status === 'completed') {
+                step.classList.add('completed');
+            } else if (status === 'error') {
+                step.classList.add('error');
+            }
+        }
+        
+        // Reset UI
+        function resetUI() {
+            status.style.display = 'none';
+            errorMessage.style.display = 'none';
+            progressContainer.style.display = 'block';
+            result.style.display = 'none';
+            
+            // Reset all steps
+            setStepStatus(step1, 'active');
+            setStepStatus(step2, '');
+            setStepStatus(step3, '');
+            setStepStatus(step4, '');
+            
+            // Reset progress
+            updateProgress(0);
+        }
+        
+        // Show error
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            status.style.backgroundColor = '#f8d7da';
+            status.textContent = 'Error occurred';
+            status.style.display = 'block';
+            processBtn.disabled = false;
+        }
+        
+        // Process video
+        async function processVideo() {
+            const videoUrl = videoUrlInput.value.trim();
+            const targetLanguage = targetLanguageSelect.value;
+            
+            if (!videoUrl) {
+                showError('Please enter a video URL');
+                return;
+            }
+            
+            // Disable button and reset UI
+            processBtn.disabled = true;
+            resetUI();
+            
+            try {
+                // Step 1: Extracting subtitles (25%)
+                setStepStatus(step1, 'active');
+                updateProgress(5);
+                
+                const response = await fetch('/process-video', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        videoUrl,
+                        targetLanguage
+                    })
+                });
+                
+                // Check for server response
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to process video');
+                }
+                
+                updateProgress(25);
+                setStepStatus(step1, 'completed');
+                
+                // Step 2: Translating (50%)
+                setStepStatus(step2, 'active');
+                updateProgress(40);
+                
+                // Step 3: Generating speech (75%)
+                setTimeout(() => {
+                    updateProgress(50);
+                    setStepStatus(step2, 'completed');
+                    setStepStatus(step3, 'active');
+                    
+                    setTimeout(() => {
+                        updateProgress(75);
+                        setStepStatus(step3, 'completed');
+                        setStepStatus(step4, 'active');
+                        
+                        // Step 4: Processing video (100%)
+                        setTimeout(async () => {
+                            const data = await response.json();
+                            
+                            if (data.status === 'error') {
+                                throw new Error(data.error || 'Failed to process video');
+                            }
+                            
+                            updateProgress(100);
+                            setStepStatus(step4, 'completed');
+                            
+                            // Show result
+                            status.style.backgroundColor = '#d4edda';
+                            status.textContent = 'Video processed successfully!';
+                            status.style.display = 'block';
+                            
+                            result.style.display = 'block';
+                            processedVideo.src = data.videoUrl;
+                            processBtn.disabled = false;
+                        }, 2000);
+                    }, 2000);
+                }, 2000);
+            } catch (error) {
+                console.error('Error:', error);
+                showError(error.message || 'An unexpected error occurred');
+                
+                // Mark current step as error
+                if (step1.classList.contains('active')) {
+                    setStepStatus(step1, 'error');
+                } else if (step2.classList.contains('active')) {
+                    setStepStatus(step2, 'error');
+                } else if (step3.classList.contains('active')) {
+                    setStepStatus(step3, 'error');
+                } else if (step4.classList.contains('active')) {
+                    setStepStatus(step4, 'error');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
